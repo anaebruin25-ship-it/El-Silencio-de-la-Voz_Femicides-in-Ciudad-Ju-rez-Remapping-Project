@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>El Silencio de la Voz — Femicides in Ciudad Juárez</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Georgia', serif; background: #111; color: #eee; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  #header { background: #1a0000; padding: 10px 20px; border-bottom: 2px solid #8b0000; flex-shrink: 0; }
+  #header h1 { font-size: 1.1rem; color: #ff4444; letter-spacing: 0.05em; }
+  #header p { font-size: 0.72rem; color: #aaa; margin-top: 2px; }
+
+  #main { flex: 1; display: flex; overflow: hidden; }
+
+  /* Left case list panel */
+  #case-panel {
+    width: 0; overflow: hidden; flex-shrink: 0;
+    background: #0f0000; border-right: 2px solid #8b0000;
+    display: flex; flex-direction: column;
+    transition: width 0.35s ease;
+  }
+  #case-panel.open { width: 280px; }
+  #case-panel-header {
+    background: #1a0000; padding: 8px 12px;
+    border-bottom: 1px solid #8b0000; flex-shrink: 0;
+  }
+  #case-panel-header h3 { font-size: 0.8rem; color: #ff6666; margin-bottom: 6px; }
+  #case-search {
+    width: 100%; background: #2a0000; border: 1px solid #660000;
+    color: #eee; padding: 5px 8px; border-radius: 4px;
+    font-size: 0.78rem; font-family: Georgia, serif;
+    outline: none;
+  }
+  #case-search::placeholder { color: #666; }
+  #case-search:focus { border-color: #cc0000; }
+  #case-list {
+    flex: 1; overflow-y: auto; padding: 4px 0;
+  }
+  #case-list::-webkit-scrollbar { width: 5px; }
+  #case-list::-webkit-scrollbar-track { background: #0f0000; }
+  #case-list::-webkit-scrollbar-thumb { background: #550000; border-radius: 3px; }
+  .case-list-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; cursor: pointer;
+    border-bottom: 1px solid #1a0000;
+    transition: background 0.1s;
+  }
+  .case-list-item:hover { background: rgba(180,0,0,0.25); }
+  .case-list-num {
+    background: #cc0000; color: white; border-radius: 50%;
+    width: 20px; height: 20px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: bold; font-family: Arial, sans-serif;
+  }
+  .case-list-info { flex: 1; min-width: 0; }
+  .case-list-name { font-size: 0.76rem; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .case-list-date { font-size: 0.68rem; color: #888; }
+  .case-no-results { padding: 16px 12px; font-size: 0.75rem; color: #666; text-align: center; font-style: italic; }
+
+  /* Map wrap */
+  #map-wrap { flex: 1; position: relative; }
+  #map { width: 100%; height: 100%; }
+
+  /* Old map panel */
+  #old-map-panel {
+    width: 0; overflow: hidden; flex-shrink: 0;
+    background: #0d0d0d; border-left: 2px solid #8b0000;
+    display: flex; flex-direction: column;
+    transition: width 0.35s ease;
+  }
+  #old-map-panel.open { width: 40%; }
+  #old-map-header {
+    background: #1a0000; padding: 8px 14px;
+    font-size: 0.75rem; color: #ffaa44;
+    border-bottom: 1px solid #8b0000; white-space: nowrap; flex-shrink: 0;
+  }
+  #old-map-inner {
+    flex: 1; display: flex; align-items: center;
+    justify-content: center; padding: 12px; overflow: auto;
+  }
+  #old-map-inner img {
+    max-width: 100%; max-height: 100%; object-fit: contain;
+    border: 1px solid #444; border-radius: 4px;
+  }
+
+  /* Markers */
+  .num-marker {
+    background: #cc0000; color: white; border: 2px solid #fff;
+    border-radius: 50%; width: 24px !important; height: 24px !important;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: bold; font-family: Arial, sans-serif;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.6); cursor: pointer; transition: transform 0.1s;
+  }
+  .num-marker:hover { transform: scale(1.3); background: #ff0000; }
+  .num-marker.selected {
+    background: #ff8c00;
+    box-shadow: 0 0 0 3px rgba(255,140,0,0.4), 0 1px 4px rgba(0,0,0,0.6);
+    transform: scale(1.25);
+  }
+
+  /* Popups */
+  .leaflet-popup-content-wrapper {
+    background: #1c0000; border: 1px solid #8b0000;
+    border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+    color: #eee; max-width: 280px;
+  }
+  .leaflet-popup-tip { background: #1c0000; }
+  .leaflet-popup-content { margin: 12px 14px; font-size: 0.82rem; line-height: 1.6; }
+  .popup-name { font-size: 1rem; font-weight: bold; color: #ff6666; margin-bottom: 6px; }
+  .popup-case { font-size: 0.72rem; color: #999; margin-bottom: 8px; }
+  .popup-row { display: flex; gap: 6px; margin-bottom: 3px; }
+  .popup-label { color: #888; min-width: 70px; font-size: 0.75rem; }
+  .popup-val { color: #ddd; font-size: 0.75rem; }
+  .popup-attacker { margin-top: 8px; padding-top: 8px; border-top: 1px solid #440000; font-size: 0.72rem; color: #ffaaaa; }
+  .popup-selected .popup-name { color: #ff8c00; }
+  .popup-selected .leaflet-popup-content-wrapper { border-color: #ff8c00; }
+
+  /* Cluster list popup */
+  .cluster-popup .leaflet-popup-content { margin: 12px 14px; }
+  .cluster-list { max-height: 240px; overflow-y: auto; border-top: 1px solid #440000; border-bottom: 1px solid #440000; margin: 6px 0; padding: 4px 0; }
+  .cluster-item { display: flex; align-items: center; gap: 8px; padding: 5px 4px; cursor: pointer; border-radius: 4px; transition: background 0.1s; }
+  .cluster-item:hover { background: rgba(180,0,0,0.35); }
+  .cluster-item-num { background: #cc0000; color: white; border-radius: 50%; width: 20px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: bold; font-family: Arial, sans-serif; }
+  .cluster-item-num.selected { background: #ff8c00; }
+  .cluster-item-name { font-size: 0.78rem; color: #ddd; line-height: 1.3; }
+  .cluster-hint { font-size: 0.7rem; color: #999; text-align: center; margin-top: 4px; font-style: italic; }
+  .cluster-back { font-size: 0.75rem; color: #ffaaaa; text-align: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid #440000; cursor: pointer; transition: color 0.1s; }
+  .cluster-back:hover { color: #ff6666; }
+
+  /* Hex cluster */
+  .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background-color: transparent !important; background: none !important; }
+  .hex-cluster {
+    background: rgba(180,0,0,0.85); color: white; font-weight: bold;
+    font-size: 13px; font-family: Arial, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%;
+    clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0% 50%);
+    border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.7);
+  }
+
+  /* Legend + controls (bottom-left of map) */
+  #map-controls {
+    position: absolute; bottom: 24px; left: 16px; z-index: 1000;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  #legend {
+    background: rgba(20,0,0,0.92); border: 1px solid #8b0000;
+    border-radius: 6px; padding: 12px 14px;
+    font-size: 0.75rem; color: #ddd;
+    max-width: 220px; box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+  }
+  #legend h3 { font-size: 0.8rem; color: #ff6666; margin-bottom: 8px; font-family: 'Georgia', serif; }
+  .legend-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .legend-row:last-child { margin-bottom: 0; }
+  .legend-note { font-size: 0.68rem; color: #999; font-style: italic; line-height: 1.4; margin-top: 8px; padding-top: 8px; border-top: 1px solid #440000; }
+  .legend-swatch-circle { background: #cc0000; border: 2px solid #fff; border-radius: 50%; width: 20px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; font-family: Arial, sans-serif; }
+  .legend-swatch-hex { background: rgba(180,0,0,0.85); border: 2px solid #fff; width: 24px; height: 24px; flex-shrink: 0; clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0% 50%); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: bold; color: white; font-family: Arial, sans-serif; }
+  .legend-label { line-height: 1.4; }
+
+  .map-btn {
+    background: #3a1a00; color: #ffaa44;
+    border: 1px solid #ff9944; padding: 6px 12px;
+    border-radius: 6px; font-size: 0.78rem; cursor: pointer;
+    white-space: nowrap; transition: background 0.2s;
+    font-family: Georgia, serif; text-align: left;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+  .map-btn:hover { background: #5a2a00; }
+  .map-btn.active { background: #5a2a00; border-color: #ffcc44; color: #ffcc44; }
+
+  /* Credits */
+  #credits { background: #1a0000; border-top: 2px solid #8b0000; padding: 8px 20px; flex-shrink: 0; }
+  #credits p { font-size: 0.72rem; color: #aaa; line-height: 1.5; }
+  #credits p:first-child { color: #ccc; margin-bottom: 2px; }
+  #credits a { color: #ff8888; text-decoration: underline; }
+  .credits-sub { font-size: 0.68rem; color: #888; }
+</style>
+</head>
+<body>
+<div id="header">
+  <h1>El Silencio de la Voz — Femicides in Ciudad Juárez</h1>
+  <p>1993–1998 · Map by Ana E. Wright · Click any marker for case details · Scroll to zoom · Click clusters to expand</p>
+</div>
+
+<div id="main">
+  <!-- Left: case list panel -->
+  <div id="case-panel">
+    <div id="case-panel-header">
+      <h3>📋 All 137 Cases</h3>
+      <input id="case-search" type="text" placeholder="Search by name or case #…" oninput="filterCases(this.value)"/>
+    </div>
+    <div id="case-list"></div>
+  </div>
+
+  <!-- Center: map -->
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="map-controls">
+      <div id="legend">
+        <h3>Legend &middot; 137 cases</h3>
+        <div class="legend-row">
+          <div class="legend-swatch-circle">#</div>
+          <div class="legend-label">Individual case<br>(numbered 1–137)</div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-swatch-hex">N</div>
+          <div class="legend-label">Cluster of N cases<br>at shared location</div>
+        </div>
+        <div class="legend-note">Zooming in also expands clusters.</div>
+      </div>
+      <button class="map-btn" onclick="toggleCaseList()" id="list-btn">📋 Browse All Cases</button>
+      <button class="map-btn" onclick="toggleOldMap()" id="toggle-btn">🗺 Compare Original Map</button>
+    </div>
+  </div>
+
+  <!-- Right: original map panel -->
+  <div id="old-map-panel">
+    <div id="old-map-header">📍 Original published map — <i>El Silencio de la Voz</i> (1999)</div>
+    <div id="old-map-inner">
+      <img src="https://www.responsible-datasets-in-context.com/posts/gender-violence/images/cases-map-image15.png" alt="Original femicide map"/>
+    </div>
+  </div>
+</div>
+
+<div id="credits">
+  <p>Interactive map by <strong>Ana E. Wright</strong>. Built from the <a href="https://www.responsible-datasets-in-context.com/posts/gender-violence/?tab=data-essay" target="_blank" rel="noopener">English Bilingual Database of <em>El Silencio de la Voz</em></a>, part of <em>Responsible Datasets in Context</em>.</p>
+  <p class="credits-sub">Original 1999 spreadsheet and map: Rohry Benitez, Adriana Candia, Patricia Cabrera, Guadalupe de la Mora, Josefina Martínez, Isabel Velázques, and Ramona Ortiz, from <em>El Silencio Que La Voz De Todas Quiebra</em>. 2023 bilingual digitization: Jasbeth Medrano (lead), Judith Ordonez, Carolina Vlaun, Alex Sanchez, and Samuel Hille, University of Texas at San Antonio.</p>
+</div>
+
+<script>
+const points = [{"lat": 31.7486, "lng": -106.5393, "n": 1, "name": "Angélica Luna Villalobos", "age": "16 years old", "date": "jan/25/93, jan/13/93", "place": "Altavista, In a particular home, On a lot of land", "cause": "Asphyxia by Strangling", "attacker": "Pedro Fernandez (Husband)", "details": ""}, {"lat": 31.6597, "lng": -106.4856, "n": 2, "name": "Alma Chavira Farel", "age": "little girl", "date": "jan/23/93", "place": "Campestre Virreyes", "cause": "Strangling", "attacker": "", "details": ""}, {"lat": 31.7234, "lng": -106.5796, "n": 3, "name": "Graciela García", "age": "20 years old", "date": "jan/29/93", "place": "Colonia Periodista", "cause": "Unknown", "attacker": "Secret lover", "details": ""}, {"lat": 31.7433, "lng": -106.5393, "n": 4, "name": "Unknown victim", "age": "Unknown", "date": "feb/17/93", "place": "Calle Oro and Violeta", "cause": "Stabbed", "attacker": "", "details": ""}, {"lat": 31.6904, "lng": -106.4245, "n": 5, "name": "Alejandra Viescas", "age": "13 years old", "date": "mar/21/93", "place": "", "cause": "Unknown", "attacker": "Gang", "details": ""}, {"lat": 31.735, "lng": -106.455, "n": 6, "name": "Luz De la O García", "age": "Unknown", "date": "apr/21/93", "place": "Calle Guillermo Prieto and Altamirano", "cause": "Physical blows", "attacker": "", "details": ""}, {"lat": 31.6904, "lng": -106.4245, "n": 7, "name": "Elizabeth Ramos", "age": "26 years old", "date": "may/08/93", "place": "", "cause": "Fire Arm", "attacker": "Boyfriend", "details": ""}, {"lat": 31.6796, "lng": -106.4515, "n": 8, "name": "Unknown victim", "age": "35 years old", "date": "may/08/94", "place": "Near Satelite, camino O. Rubio", "cause": "Strangling", "attacker": "", "details": ""}, {"lat": 31.7008, "lng": -106.5625, "n": 9, "name": "Unknown victim", "age": "24 years old", "date": "may/12/93", "place": "Cerro Bola", "cause": "Asphyxia by Strangling", "attacker": "", "details": ""}, {"lat": 31.6904, "lng": -106.4245, "n": 10, "name": "Virginia Hernández", "age": "26 years old", "date": "may/25/93", "place": "", "cause": "Stabbed", "attacker": "Secret lover", "details": ""}, {"lat": 31.7658, "lng": -106.5772, "n": 11, "name": "Verónica Huitró Quezada", "age": "?", "date": "jun/05/93", "place": "Anapra, Trash Bin", "cause": "Bled out, Thorax wounded", "attacker": "Gabriel Garcia Ramirez and Maria Walker Rodriguez", "details": "jun/05/93"}, {"lat": 31.6904, "lng": -106.4245, "n": 12, "name": "Unknown victim", "age": "?", "date": "jun/10/93", "place": "In the patios of highschool Altavista, dirt roads, at the Rio Bravo Border", "cause": "Strangling, Stabbed", "attacker": "", "details": "jun/1/93"}, {"lat": 31.7526, "lng": -106.4856, "n": 13, "name": "Guadalupe Ivonne Estrada Salas", "age": "16 years old", "date": "jun/14/93", "place": "Chamizal, Parks and Gardens", "cause": "Not determined", "attacker": "", "details": "jun/8/93"}, {"lat": 31.6904, "lng": -106.4245, "n": 14, "name": "Gloria Escobedo", "age": "20 years old", "date": "aug/20/93", "place": "", "cause": "Strangling", "attacker": "Stepfather", "details": ""}, {"lat": 31.7061, "lng": -106.4649, "n": 15, "name": "Unknown victim", "age": "28 years old", "date": "aug/29/23", "place": "Real Estate development Senecu, interior of a Brown Mustang", "cause": "Strangling", "attacker": "", "details": ""}, {"lat": 31.7406, "lng": -106.4685, "n": 16, "name": "Marcela Santos", "age": "18 years old, 16 years old", "date": "sep/16/93, sep/14/93", "place": "Cruz Roja", "cause": "Wounded by bullet, lip sup.", "attacker": "Heberardo Cruz Aguilar", "details": ""}, {"lat": 31.6955, "lng": -106.5222, "n": 17, "name": "Mireya Hérnandez Méndez", "age": "20 years old", "date": "oct/13/93", "place": "Trash Bin at industrial Juarez park", "cause": "Strangling", "attacker": "", "details": ""}, {"lat": 31.6904, "lng": -106.4245, "n": 18, "name": "Unknown victim", "age": "Unknown", "date": "oct/14/93", "place": "", "cause": "Unknown", "attacker": "", "details": "nov/13/93"}, {"lat": 31.6902, "lng": -106.4978, "n": 19, "name": "Esmeralda Leyva Rodríguez", "age": "13 years old", "date": "nov/14/93, nov/13/93", "place": "ESAHE, plot of land, ditch., Escuela Mariano Escobar", "cause": "ND, Strangling", "attacker": "Alberto Sanzhes M., Gabriel Rios, Cesar Aleman, Hipolito Ramirez Trujillo", "details": ""}, {"lat": 31.7234, "lng": -106.5406, "n": 20, "name": "Yolanda Tapia", "age": "50 years old", "date": "dec/15/93", "place": "Calle Articulo 57 #540", "cause": "Head injury", "attacker": "Jesus Roberto Gil Tapia (son)", "details": ""}, {"lat": 31.5947, "lng": -106.5442, "n": 21, "name": "Unknown victim", "age": "35 years old, 25 years old", "date": "jan/11/94", "place": "Plot of land, Col. Granjas de Sta. Elena", "cause": "Strangling", "attacker": "", "details": ""}, {"lat": 31.7486, "lng": -106.5283, "n": 22, "name": "Emilia García Hernández", "age": "?", "date": "feb/11/94", "place": "died en El Paso, TX", "cause": "Short Penetrating wounds to the neck and thorax", "attacker": "Norma Mendoza, Rosa Alicia Garza, Laura Catañon G", "details": "Kidnapped before arriving to school at Gabino Barreda School"}, {"lat": 31.6119, "lng": -106.5662, "n": 23, "name": "Rocío Cordero Esquivel", "age": "10 years old, 11 years old", "date": "mar/11/94", "place": "C. Casas Grades, drain concrete tube., Barranco Azul", "cause": "Asphyxia by Strangling", "attacker": "Brother of the stepfather, ran away", "details": ""}, {"lat": 31.6332, "lng": -106.5198, "n": 24, "name": "Lorena Isela González Aramillo", "age": "23 years old", "date": "apr/25/94", "place": "Km 19 C. C. Grandes., Km 19 de la C. Panamericana, 2 Km. from garita aduanal", "cause": "Asphyxia by Strangling", "attacker": "Jorge Alberto Muñoz Ch. Adrian Mireles., Alejandro Mainez, owner of Zafari and other bars", "details": ""}, {"lat": 31.6915, "lng": -106.4515, "n": 25, "name": "Gladys Yaneth Fierro Vargas", "age": "10 years old, 12 years old", "date": "may/8/94, may/12/94", "place": "Carratera J-Porvenir, Radio Cañon. Parcela", "cause": "Asphyxia by Strangling", "attacker": "ND. The family has blocked the investigation", "details": "may/6/94 at the Juarez monument"}, {"lat": 31.6929, "lng": -106.5613, "n": 26, "name": "Unknown victim", "age": "Unknown", "date": "may/12/94", "place": "Cerro Bola", "cause": "Strangling", "attacker": "", "details": ""}, {"lat": 31.7565, "lng": -106.5503, "n": 27, "name": "Donna Maurine Striplin Boggs", "age": "28 years old, 26 years old", "date": "may/28/94, april/30/94", "place": "Rio Bravo, Refineria Esmalda (Asarco)", "cause": "Stabbing wounds on neck and thorax", "attacker": "", "details": ""}, {"lat": 31.7128, "lng": -106.5772, "n": 28, "name": "Ma. augustina Hernandez, de Velarde", "age": "35 years old", "date": "jun/24/94", "place": "Col. 16 de septiembre, cuarto de madero", "cause": "Strangling, polytrauma., Physical blows", "attacker": "Alfredo Coronado Originales (lover of the victim)", "details": ""}, {"lat": 31.738, "lng": -106.5344, "n": 29, "name": "Patricia (Alias \"la Burra\")", "age": "30 years old", "date": "ag/8/94", "place": "Callejón Guadalupe #300, central zone", "cause": "Deep contusion in the abdomen.", "attacker": "Raúl \"El Chilango\", Mario Gallegos \"El Mariachi\"", "details": ""}, {"lat": 31.6066, "lng": -106.4905, "n": 30, "name": "Unknown victim", "age": "17 aprox, 16 years old", "date": "oct/24/94", "place": "Plot of land , Libramiento aeropuerto, plastic bag", "cause": "Likely Strangled", "attacker": "", "details": ""}, {"lat": 31.734, "lng": -106.4917, "n": 31, "name": "Unknown victim", "age": "25 years old, 30 years old", "date": "nov/9/94", "place": "Vicente Guerrero, between Nicaragua y Bolivia. abandoned building, second Floor", "cause": "Asphyxia by strangling", "attacker": "", "details": ""}, {"lat": 31.6119, "lng": -106.4905, "n": 32, "name": "Gulliermina Hernández", "age": "15 years old", "date": "nov/20/24", "place": "Lote Bravo; Gpe. Distrito Bravos private property", "cause": "Inhaled carbon monozide, Incinerated", "attacker": "Juan Carlos Escajeda", "details": ""}, {"lat": 31.5973, "lng": -106.4295, "n": 33, "name": "Unknown victim", "age": "Unknown", "date": "jan/10/95", "place": "C. J-Porvenir, Ej El Suzal", "cause": "Unknown", "attacker": "", "details": ""}, {"lat": 31.7287, "lng": -106.5723, "n": 34, "name": "Ma. Cristina Quezada Amador, Ma. Cristina Quezada Mauricio", "age": "30 years old, 31 years old", "date": "jan/24/95", "place": "Home Address particular, calle José Casavantes #1168, Col Fco. I Madero.", "cause": "Strangled.", "attacker": "Ezequiel Rubio Burciaga, lover", "details": ""}, {"lat": 31.6703, "lng": -106.5125, "n": 35, "name": "Miriam Velázquez Mendoza, Miriam Adriana Velazquez", "age": "14 years old", "date": "feb/23/95", "place": "Km 6 1/2 Eje J. Gabriel, prop. priv. Zanja a 60 m road", "cause": "Bled out, Thorax wounds", "attacker": "", "details": ""}, {"lat": 31.7393, "lng": -106.46, "n": 36, "name": "Fabiola Samudio Calderón, Anonymous, identified later", "age": "29 years old", "date": "apr/16/95", "place": "Motel, Mi Ranchito, Av. Paseo T. de la Rep., room 21", "cause": "Congestion, intoxication sustance unknown", "attacker": "", "details": ""}, {"lat": 31.7419, "lng": -106.449, "n": 37, "name": "Katrina Daniel Gutiérrez, Daniela", "age": "20 years old, 25 years old", "date": "apr/20/95", "place": "Fracc. Paseo del Rio, land in prol. Hermanos Escobar.", "cause": "Asphyxia by strangling.", "attacker": "", "details": ""}, {"lat": 31.6146, "lng": -106.5393, "n": 38, "name": "Araceli Rosaura Mtz. Montañez, Anonymous, identified later, Imelda Martinez Montañez", "age": "19 years old", "date": "jul/3/95 ; jul/5/95", "place": "Behind Pemex; Km. 2 C. C. Gdes. near the train tracks. above a plastic canvas", "cause": "Strangled.", "attacker": "Juan Manuel Cruz C., neighbor", "details": ""}, {"lat": 31.734, "lng": -106.5369, "n": 39, "name": "Ericka García Moreno", "age": "18 - 19 years old", "date": "jul/15/95", "place": "Hotel del Valle, Calle La Paz, Centro.", "cause": "Asphyxia by strangling.", "attacker": "", "details": ""}, {"lat": 31.6703, "lng": -106.4771, "n": 40, "name": "Gloria Olivas Morales de Ríos, Olivia Morales", "age": "35 years old, 28 years old", "date": "ag/6/95", "place": "Jilotepec, asphalt belt near Asfaltos de la frontera", "cause": "Asphyxia by strangling.", "attacker": "", "details": "Kidnapped along with Walter Ríos and Alejandro Fuentes"}, {"lat": 31.7273, "lng": -106.5393, "n": 41, "name": "Patricia Cortez Garza, Patricia Cortez Campos", "age": "33 years old", "date": "ag/7/95", "place": "Fco. Campos 331, Col Obrera., C. Velarde y Fco. Campa", "cause": "Congestion, intoxication substance unknown", "attacker": "", "details": ""}, {"lat": 31.6133, "lng": -106.5271, "n": 42, "name": "Elizabeth Castro García", "age": "17 years old", "date": "ag/10/95; ag/19/95", "place": "Zarja a 20km C. Casas Grandes, Km 5.", "cause": "Asphyxia by strangling.", "attacker": "Omar Latif Sharif.", "details": ""}, {"lat": 31.7327, "lng": -106.4893, "n": 43, "name": "Gloria Elena Escobedo Piña", "age": "20 years old", "date": "ag/20/95", "place": "Casa I. De La Peña 1158.", "cause": "Asphyxia by strangling.", "attacker": "Miguel de Jesús Montelongo, step father", "details": ""}, {"lat": 31.5907, "lng": -106.5406, "n": 44, "name": "Unknown (122/95)", "age": "18-20 years old", "date": "ag/22/95", "place": "C. C. Gdes., desierto (same place of the case of jan/11/94: Granjas Santa Elena)", "cause": "was not determined", "attacker": "", "details": ""}, {"lat": 31.5894, "lng": -106.5454, "n": 45, "name": "Verónica Hultrón possibly(123/95)", "age": "16-17", "date": "ag/22/95", "place": "25 m after the first body (Granjas de Santa Elena)", "cause": "was not determined", "attacker": "Los Rebeldes (10 members 1996)", "details": ""}, {"lat": 31.6226, "lng": -106.5772, "n": 46, "name": "Angélica Márquez Ledezma", "age": "16 years old", "date": "ag/24/95", "place": "Km.25 CC Gdes., Cerro Bola.", "cause": "G parietal and temporal lobe", "attacker": "", "details": "Disappeared ap/20/95 Reported on 22 of april, by her aunt"}, {"lat": 31.7393, "lng": -106.5393, "n": 47, "name": "Ma. De los Angeles Deras, Miriam Derás", "age": "25 years old", "date": "ag/26/95", "place": "Casa, Mercurio 902.", "cause": "Bled out, Gunshot wounds", "attacker": "", "details": ""}, {"lat": 31.6199, "lng": -106.4856, "n": 48, "name": "Silvia Elena Rivera Morales", "age": "16 years old", "date": "sep/1/95", "place": "Lote Bravo. KM 25 C. Panamericana, gap towards the east 2Km from libramiento Torres del PRI", "cause": "Strangled.", "attacker": "Omar Latif Sharif.", "details": "jul/7/95 reported on july 8, seen on a monument"}, {"lat": 31.64, "lng": -106.35, "n": 49, "name": "Unknown victim", "age": "24 years old", "date": "sep/5/95", "place": "Km20 C. Panamericana, Zacate Blanco, Libramiento Aeropuerto.", "cause": "Broken Neck", "attacker": "", "details": ""}, {"lat": 31.6053, "lng": -106.4954, "n": 50, "name": "Unknown victim", "age": "Unknown", "date": "sep/5/95", "place": "Lote Bravo.", "cause": "Unknown", "attacker": "", "details": ""}, {"lat": 31.6133, "lng": -106.5003, "n": 51, "name": "Olga Alicia Carrillo", "age": "20 years old", "date": "sep/10/95", "place": "Zacate Blanco, Libramiento Aeropuerto., Lote Bravo", "cause": "Broken Neck, Wounds from a blade object", "attacker": "", "details": ""}, {"lat": 31.58, "lng": -106.37, "n": 52, "name": "Adriana Torres Márquez", "age": "15 years old", "date": "nov/2/95", "place": "Behind Granjas Santa Elena C C Grandes. Lote Bravo.", "cause": "Broken Neck", "attacker": "", "details": "Disappeared from the center. Reported the 9th of may"}, {"lat": 31.5867, "lng": -106.543, "n": 53, "name": "Unknown victim", "age": "Unknown", "date": "nov/4/95", "place": "Behind Granjas Santa Elena C C Grandes. Lote Bravo.", "cause": "Unknown", "attacker": "", "details": ""}, {"lat": 31.5987, "lng": -106.4319, "n": 54, "name": "Unknown victim", "age": "18 years old", "date": "nov/18/95", "place": "Poblado Loma Blanca", "cause": "Bled Out", "attacker": "", "details": ""}, {"lat": 31.5934, "lng": -106.427, "n": 55, "name": "Ignacia Morales Soto", "age": "22 years old, 32 years old", "date": "nov/20/95; nov/23/95", "place": "Country road, Gpe. Distrito Bravos., Río Bravo", "cause": "Cranioencephalic Trauma, Stabbed", "attacker": "Juan Escajeda", "details": ""}, {"lat": 31.6904, "lng": -106.4245, "n": 56, "name": "Anonymous", "age": "16 years old", "date": "nov/25/95", "place": "", "cause": "Strangled.", "attacker": "", "details": "identified the 27 of nov"}, {"lat": 31.7074, "lng": -106.5198, "n": 57, "name": "Rosa Isela Tena Quintanilla", "age": "14 years old, 15 years old", "date": "dec/15/95", "place": "Plot of land, Col. San Antonio, calle Murcia y Hungría.", "cause": "Asphyxia by strangling., Herida arma blanca.", "attacker": "Ran away to the outskirts, Tied with the same knot as Elizabeth Castro", "details": ""}, {"lat": 31.6438, "lng": -106.5418, "n": 58, "name": "Elizabeth Gómez", "age": "29 years old", "date": "dec/25/05", "place": "Campos deportivos de PEMEX.", "cause": "Stabbed", "attacker": "Municipal police.", "details": ""}, {"lat": 31.72, "lng": -106.45, "n": 59, "name": "Laura Ana Inere", "age": "27 years old", "date": "dec/25/05", "place": "Panteón Municipal.", "cause": "Wounded by Fire Arm.", "attacker": "Municipal police.", "details": ""}, {"lat": 31.73, "lng": -106.5308, "n": 60, "name": "Unknown victim", "age": "30 years old", "date": "feb./96", "place": "Garita de metales.", "cause": "Strangling.", "attacker": "Desconocido", "details": ""}, {"lat": 31.6133, "lng": -106.532, "n": 61, "name": "Unknown victim", "age": "9-12 years old, 10 years old", "date": "mar/10/96, mar/9/96", "place": "Km 7 C C Grandes. , Lomas de Poleo, Km 27.", "cause": "Unknown", "attacker": "", "details": ""}, {"lat": 31.7658, "lng": -106.5857, "n": 62, "name": "Unknown victim", "age": "17 years old", "date": "mar/12/96", "place": "Lomas de Poleo.", "cause": "NE, Strangling or wounded", "attacker": "Los Rebeldes", "details": ""}, {"lat": 31.7685, "lng": -106.5833, "n": 63, "name": "Unknown victim", "age": "Unknown", "date": "mar/18/96", "place": "Lomas de Poleo.", "cause": "NE, Strangling or wounded", "attacker": "Los Rebeldes", "details": ""}, {"lat": 31.7632, "lng": -106.5906, "n": 64, "name": "Lucy ¿?", "age": "18 years old", "date": "mar/28/96", "place": "Lomas de Poleo.", "cause": "NE, Strangling or wounded", "attacker": "Los Rebeldes", "details": ""}, {"lat": 31.7711, "lng": -106.5869, "n": 65, "name": "Tania ¿?", "age": "Unknown", "date": "mar/28/96", "place": "Lomas de Poleo, 5km from the previous ravine.", "cause": "NE, Strangling or wounded", "attacker": "Los Rebeldes", "details": ""}, {"lat": 31.7671, "lng": -106.5906, "n": 66, "name": "Unknown victim", "age": "17 years old", "date": "mar/23/96", "place": "Lomas de Poleo.", "cause": "Strangling.", "attacker": "", "details": ""}, {"lat": 31.7724, "lng": -106.5918, "n": 67, "name": "Guadalupe Verónica Castro", "age": "16 years old", "date": "mar/29/96", "place": "Lomas de Poleo.", "cause": "Unknown", "attacker": "", "details": ""}, {"lat": 31.7539, "lng": -106.5857, "n": 68, "name": "Rosario Garcia Leal", "age": "Unknown", "date": "apr/7/96", "place": "Ejido López Mateos, south of Lomas de Poleo, near a ranch, property of José Pacillas.", "cause": "Strangling. Semi-deep wounds", "attacker": "Los Rebeldes", "details": ""}, {"lat": 31.6504, "lng": -106.4588, "n": 69, "name": "Rosario Fatima Martinez", "age": "19 years old", "date": "apr/28/96", "place": "Av. Henequen in the parking lot of the Dirección Gral. of police in a car", "cause": "Asphyxia by Strangling.", "attacker": "Jaime Gilberto Martínez Acosta", "details": ""}, {"lat": 31.7287, "lng": -106.5271, "n": 70, "name": "Unknown victim", "age": "28 years old", "date": "apr/28/96", "place": "Building Calle Galeana.", "cause": "Wounded by sharp blade.", "attacker": "", "details": ""}, {"lat": 31.72, "lng": -106.43, "n": 71, "name": "Unknown victim", "age": "23 years old", "date": "jun/7/98", "place": "\"salon\".", "cause": "Wounded by Fire Arm.", "attacker": "Tomas Sandoval, husband", "details": ""}, {"lat": 31.6146, "lng": -106.5772, "n": 72, "name": "Unknown victim", "age": "17 years old", "date": "jun/10/96", "place": "C C Grandes, Km 25.", "cause": "Unknown", "attacker": "", "details": ""}, {"lat": 31.6597, "lng": -106.5491, "n": 73, "name": "Silvia Rivera Salas", "age": "21 years old", "date": "jun/26/96", "place": "Col Toribio Ortega, near the CERESO.", "cause": "Wounded by sharp blade.", "attacker": "José Antonio Serna Cruz and Jesús Gómez Cruz, one of these is the husband", "details": ""}, {"lat": 31.6106, "lng": -106.5174, "n": 74, "name": "Unknown victim", "age": "20-25, 15-16 years old", "date": "jul/8/96", "place": "Lote Bravo. Km 21 Carretera Panamericana.", "cause": "F de cráneo, Elongated Stabbing Wounds", "attacker": "", "details": ""}, {"lat": 31.6066, "lng": -106.5735, "n": 75, "name": "Unknown victim", "age": "Unknown", "date": "jul/9/96", "place": "Km 27 C C Grandes.", "cause": "Wounded by Fire Arm.", "attacker": "", "details": ""}, {"lat": 31.7579, "lng": -106.4759, "n": 76, "name": "Sandra Luz Juárez Vázquez", "age": "18 years old, 17 years old", "date": "jul/9/96", "place": "Rio Bravo, on the US side.", "cause": "Strangling.", "attacker": "United States authorities in charge of Investigations", "details": "jul/8, left at 7:00 am for the Maquiladora Zenco, Carr. P"}, {"lat": 31.726, "lng": -106.4856, "n": 77, "name": "Rocío augüero Miranda", "age": "30 years old, 28 years old", "date": "jul/29/96", "place": "Canal de aguas negras, López Mateos and Vicente Gro.", "cause": "Unknown", "attacker": "Tied to Drug Trafficking Kidnapped by 17 individuals", "details": ""}, {"lat": 31.7021, "lng": -106.5161, "n": 78, "name": "Sonia Ivette Sánchez Ramírez", "age": "15 years old, 13 years old", "date": "aug/9/96", "place": "Train Tracks, Land near the Policía Judicial del Estado building , behind the sec. técnica 48 .", "cause": "Semi-deep wounds.", "attacker": "Pedro Vazquez Aguilar Suspects \"El pelón\"y \"El pedro\"", "details": "aug/8/96"}, {"lat": 31.6013, "lng": -106.4344, "n": 79, "name": "Soledad Beltrán", "age": "24 years old", "date": "aug/15/96", "place": "Near canal de aguas negras, Loma Blanca", "cause": "Unknown", "attacker": "Unknown Homicide", "details": ""}, {"lat": 31.7287, "lng": -106.543, "n": 80, "name": "Patricia Palafox Zavala, Alma Patricia o Leticia Palafox Z.", "age": "14 years old, 17 years old", "date": "aug/15/96", "place": "Col. Juárez, Calle Mercurios #1948. Home Address of her parents", "cause": "Beheaded", "attacker": "Ernesto Gómez Cordero, concubine, secret lover, killed her because she threatened to leave him for a different partner", "details": ""}, {"lat": 31.6889, "lng": -106.4856, "n": 81, "name": "Unknown victim", "age": "ND, 17 years old", "date": "aug/18/96", "place": "Acequia Ave. Tec., Col. Eréndira or Col Arturo Gámiz", "cause": "Wounds by sharp bladed object", "attacker": "", "details": ""}, {"lat": 31.596, "lng": -106.4209, "n": 82, "name": "Rita Parker Hopkins, Perla Parker Hopking", "age": "30 years old, 48 years old", "date": "aug/29/96", "place": "San Agustin, sandy area", "cause": "Wounded by Fire Arm.", "attacker": "Ties to drug trafficking", "details": "Kidnapped in El Paso"}, {"lat": 31.5907, "lng": -106.4197, "n": 83, "name": "Victoria Elaine Parker Hopkins", "age": "25 years old, 30 years old", "date": "aug/29/96", "place": "San Agustin, sandy area", "cause": "Fire Arm.", "attacker": "Ties to drug trafficking", "details": "Kidnapped in El Paso"}, {"lat": 31.5881, "lng": -106.4197, "n": 84, "name": "Unknown victim", "age": "19-25", "date": "oct/30/96", "place": "El Sauzal", "cause": "Strangling and Wounds", "attacker": "", "details": ""}, {"lat": 31.5867, "lng": -106.4234, "n": 85, "name": "Leticia De la Cruz Bañuelos", "age": "30 years old", "date": "nov/1/96", "place": "In front of the Ranch Grande dance hall", "cause": "Wounded by Fire Arm.", "attacker": "Shot from a car by a man with a skull mask", "details": ""}, {"lat": 31.68, "lng": -106.4, "n": 86, "name": "Leticia Garcia Rosales", "age": "35 years old", "date": "nov/13/96", "place": "Calle del Rayo, dirt road", "cause": "Cranioencephallic Trauma", "attacker": "Juan Salazar García", "details": ""}, {"lat": 31.6769, "lng": -106.4344, "n": 87, "name": "Unknown victim", "age": "20-25 years old", "date": "nov/18/96", "place": "Rio, next to vado Fuentes", "cause": "Drowned", "attacker": "", "details": ""}, {"lat": 31.665, "lng": -106.4759, "n": 88, "name": "Susana Flores Flores", "age": "13 years old", "date": "dec/5/96", "place": "Fracc. Oasis", "cause": "Wounded by Fire Arm", "attacker": "Edgar Omar Sánchez", "details": "Dissapeared on the way to school"}, {"lat": 31.6623, "lng": -106.4746, "n": 89, "name": "Brenda Lizet Nájera", "age": "15 years old", "date": "dec/5/96", "place": "Fracc. Oasis, Infonavit Tecnológico", "cause": "Wounded by Fire Arm", "attacker": "Edgar Omar Sánchez, Boyfriend", "details": ""}, {"lat": 31.5814, "lng": -106.5332, "n": 90, "name": "Cinthya Rocio Acosta Alvarado", "age": "10 years old", "date": "mar/11/97", "place": "200 metres of path towards a landfill", "cause": "Asphyxia by Strangling.", "attacker": "Francisco Guerra Robles, Political Uncle, confessed, many studies were performed to identify the cadaver.", "details": "feb/7/98, off of Col. Raúl Garcia"}, {"lat": 31.6862, "lng": -106.5613, "n": 91, "name": "Ana Maria Gardea Villalobos", "age": "10 years old, 11 years old", "date": "mar/13/97", "place": "Cerro Bola", "cause": "Bled out. 15 Thorax wounds to the neck", "attacker": "(gang members) Francisco Rodriguez, Marcos Alvarado, Miguel Rodriguez., Jesús Alberto Rodriguez Reyes will be sentenced (7 of sep. 98)", "details": "mar/1/97, Col. México 68"}, {"lat": 31.5987, "lng": -106.4222, "n": 92, "name": "Maribel Palomino Arvizo, this identity is assumed", "age": "19 years old, 16-18 years old", "date": "mar/21/97", "place": "Parcela El Sauzal.", "cause": "5 sharp blade wounds on the neck", "attacker": "She met him at Fiesta, and he invited her to work in El Paso.", "details": "feb/9/97"}, {"lat": 31.592, "lng": -106.4222, "n": 93, "name": "Siliva Guadalupe Diaz", "age": "24 years old, 22 years old", "date": "mar/29/97", "place": "Sauzal Viejo", "cause": "Asphyxia by Strangling.", "attacker": "", "details": "mar/7/97, Last seen at Km 5, industrial park."}, {"lat": 31.6239, "lng": -106.5943, "n": 94, "name": "Unknown victim", "age": "Unknown", "date": "marzo/97", "place": "Casas Grandes", "cause": "Unknown", "attacker": "Rocio Rincón is suspected", "details": "1991"}, {"lat": 31.6385, "lng": -106.521, "n": 95, "name": "Miriam Auguilar Rodríguez", "age": "16 years old", "date": "apr/11/97", "place": "Carr, C. Gdes, Behind the coke", "cause": "Cranioencephallic Trauma", "attacker": "Ernesto Leopoldo Sosa Murillo (Organic Brain Syndrome due to drug abuse)", "details": "apr/7/97"}, {"lat": 31.592, "lng": -106.4307, "n": 96, "name": "Unknown victim", "age": "28-33 years old", "date": "may/16/97", "place": "El Sauz", "cause": "Physical blows to the head", "attacker": "", "details": ""}, {"lat": 31.6623, "lng": -106.4539, "n": 97, "name": "Ameila Lucio Borjas", "age": "18 years old", "date": "may/27/97", "place": "Salvarcar, in their home address", "cause": "Bled out, 9 wounds from sharp bladed object thorax", "attacker": "Raúl Saldaña Delgado, Husband", "details": ""}, {"lat": 31.7035, "lng": -106.4954, "n": 98, "name": "Verónica Beltrán Manjarrez, Verónica Beltrán Mainez", "age": "15 years old", "date": "may/31/97", "place": "IMMS, clinica 35", "cause": "Bled out, Gunshot wounds", "attacker": "Gonzálo Mata Hdez. Enrique and José Galván Aguilar", "details": ""}, {"lat": 31.608, "lng": -106.582, "n": 99, "name": "Marcela Macias Fernández, Marcela Hdez. Macias", "age": "34 years old, 35 years old", "date": "jun/19/97", "place": "Km 29 C. C. Gdes", "cause": "Strangling", "attacker": "Ramón Ochoa Pantoja, Husband, declared himself guilty", "details": "Reported by her husband"}, {"lat": 31.6995, "lng": -106.4588, "n": 100, "name": "Unknown victim", "age": "22-25 years old", "date": "jul/8/97", "place": "C. J-Porvenir termoeléctrica. Acequia", "cause": "Unknown", "attacker": "", "details": ""}, {"lat": 31.738, "lng": -106.543, "n": 101, "name": "Marta Yolanda Gtz Garcia", "age": "33 years old, 18 years old", "date": "sep/8/97", "place": "Mina and Ocampo tapias. Col. Barrio Alto.", "cause": "Asphyxia by Strangling.", "attacker": "David A. Castillo Alvarez, Javier Escramilla Soto Was seen with \"El chango\", \"La camelia\" and \"el Luis\"", "details": ""}, {"lat": 31.665, "lng": -106.5027, "n": 102, "name": "Ma. Irma Plancarte Luna", "age": "29 years old, 25-30 years old", "date": "sep/27/97", "place": "Blvd. Zaragoza, in front of particular homa address Col. Div. Del Norte", "cause": "Cranioencephallic Trauma", "attacker": "Pedro Alberto Muñoz Hdez., Godfather Alias \"El Coreaneo\"", "details": ""}, {"lat": 31.6424, "lng": -106.5393, "n": 103, "name": "Unknown victim", "age": "15 years old, 15-17 years old", "date": "oct/3/97", "place": "Barránco Azul, Baseball Fields", "cause": "Asphyxia by Strangling", "attacker": "", "details": ""}, {"lat": 31.6385, "lng": -106.5393, "n": 104, "name": "Unknown, Ma. Esther Luna Alfaro", "age": "Unknown", "date": "oct/12/97", "place": "C. C. Gdes, x Permex, soccer fields", "cause": "Sharp blade wounds in the abdomen", "attacker": "Tested AND negative possible relationship with Ma. Esther Luna", "details": ""}, {"lat": 31.69, "lng": -106.42, "n": 105, "name": "Virginia Rodríguez Beltrán", "age": "32 years old", "date": "oct/12/97, 1 hour before", "place": "Col. Torreón", "cause": "Bled out due to gunshot wounds", "attacker": "Rafael Baltierra Ortega, neighbor that sells agua celeste (drug)", "details": ""}, {"lat": 31.6915, "lng": -106.5589, "n": 106, "name": "Juana Auguinauga Mares, Juana Iñiguez Mares", "age": "38 years old", "date": "oct/21/97", "place": "Col. Palo Chino, Outskirts of the hill", "cause": "Strangled with an electric cable", "attacker": "Antonio Hdez Aguinaga, nephew, only suspect", "details": "oct/15/97, oct/20/97"}, {"lat": 31.6902, "lng": -106.5613, "n": 107, "name": "Sofia González Vivar, Anónima", "age": "20-24 years old", "date": "nov/6/97", "place": "Outskirts del cerro bola", "cause": "Cranioencephallic Trauma", "attacker": "DNA tests and others (waiting on results to confirm identity)", "details": ""}, {"lat": 31.7486, "lng": -106.5723, "n": 108, "name": "Norma Julissa Ramos Muñoz", "age": "Unknown", "date": "nov/7/97", "place": "Anapra, Ugarte and Ags.", "cause": "Cranial Wounds, Fire Arm", "attacker": "Félix Silba Araujo, concubine, Found Shells c 45 and heron", "details": ""}, {"lat": 31.5934, "lng": -106.521, "n": 109, "name": "Eréndira Buendia Muñoz", "age": "20 years old, 19 years old", "date": "nov/16/97", "place": "Fluorex, Valle Dorado Farms", "cause": "Strangling", "attacker": "Bernadino Muñoz Véliz refugee", "details": "nov/12/97"}, {"lat": 31.6968, "lng": -106.5625, "n": 110, "name": "Ma. Teresa Renteria Salazar", "age": "34 years old, 32 years old", "date": "nov/29/97", "place": "Cerro Bola, building undergoing construction, Col. P. E. Calles, in their home", "cause": "Bled out, neck wound", "attacker": "Sergio Arturo Moreno Pérez, Secret lover", "details": ""}, {"lat": 31.6093, "lng": -106.4954, "n": 111, "name": "Amalia Ma. de los Dolores Saucedo D. de León", "age": "33 years old", "date": "dec/1/97", "place": "Libramiento areopuerto, Lote Bravo", "cause": "Broken Neck", "attacker": "Juan Muro (pressumed secret lover and suspect)", "details": "nov/29/97"}, {"lat": 31.5828, "lng": -106.543, "n": 112, "name": "Aracely Núñez Santos", "age": "18-20 years old", "date": "dec/1/97", "place": "Carr. Casas Grandes, Back turned to col. Santa Elena, on the riverbed of a river", "cause": "Unknown", "attacker": "", "details": "dec/1/97"}, {"lat": 31.7366, "lng": -106.4954, "n": 113, "name": "Rosa Margarita Arellanes", "age": "24 years old", "date": "dec/7/97", "place": "H. San José", "cause": "Bled out, wounded by fire arm", "attacker": "Victor Lazcano, Santiago Cunnimghan Hidalgo, Guillermo Martinez, Alberto Galindo Espinoza, Fco. Salas (Workers, responsible for concealment)", "details": "dec/7/97"}, {"lat": 31.7618, "lng": -106.5869, "n": 114, "name": "Unknown victim", "age": "16-17 years old", "date": "dec/19/97", "place": "Lomas de Poelo", "cause": "Unknown", "attacker": "Los Rebeldes", "details": ""}, {"lat": 31.6, "lng": -106.3, "n": 115, "name": "Yesica Martínez Morales", "age": "13 years old", "date": "jan/2/98", "place": "Km 24 C. Panamericana, Back turned to CFE. In a channel", "cause": "Asphyxia by Strangling", "attacker": "A bum from the colony, has not been found", "details": "dec/23/97"}, {"lat": 31.657, "lng": -106.51, "n": 116, "name": "Martha Esmeralda Veloz Valdez", "age": "20 years old", "date": "jan/25/98", "place": "Col. Nuevo Hipódromo, in a hole., With their back to Info. Oasis Revolución.", "cause": "Hipovulemic Shock", "attacker": "Francisco Javier Open Reyes Sosa, Husband. Still needing to corroborate these details", "details": ""}, {"lat": 31.6904, "lng": -106.4245, "n": 117, "name": "Marla Isela Núñez Herrera", "age": "33 years old", "date": "jan/26/98", "place": "", "cause": "Unknown", "attacker": "", "details": ""}, {"lat": 31.6597, "lng": -106.5247, "n": 118, "name": "Siliva Gapriela Lauguna Cruz", "age": "16 years old", "date": "jan/26/98", "place": "Oasis Revolución., 100m from Boulevard Zaragoza", "cause": "Hipovulemic Shock", "attacker": "Armando Leyva Sánchez, Exposes himself naked on the traintracks", "details": "jan/24/98"}, {"lat": 31.6677, "lng": -106.4954, "n": 119, "name": "Ana Hipólito Campos", "age": "38 years old", "date": "feb/3/98", "place": "In his home. Puebla esq. Nvo. León, Col. Lomas de San José", "cause": "Wouned by sharp blade: 40 blows, semidecapitated", "attacker": "", "details": "Did not disappear"}, {"lat": 31.7579, "lng": -106.5857, "n": 120, "name": "Unknown victim", "age": "?", "date": "feb/16/98", "place": "Lomas De Poleo, 4km from Puerto Anapra", "cause": "Unknown", "attacker": "", "details": ""}, {"lat": 31.7592, "lng": -106.5881, "n": 121, "name": "Unknown victim", "age": "?", "date": "feb/16/98", "place": "Lomas De Poleo, 4km from Puerto Anapra", "cause": "Unknown", "attacker": "", "details": ""}, {"lat": 31.7671, "lng": -106.582, "n": 122, "name": "Raquel Lechuga Masìas", "age": "?", "date": "feb/16/98", "place": "Lomas De Poleo, 4km from Puerto Anapra", "cause": "Unknown", "attacker": "Identified by DNA, given to the family", "details": "dec/31/96"}, {"lat": 31.6769, "lng": -106.5662, "n": 123, "name": "Unknown victim", "age": "?", "date": "feb/16/98", "place": "Municipal Garbage dump", "cause": "Blow to the head with 20 kgs. rock", "attacker": "", "details": ""}, {"lat": 31.6464, "lng": -106.4685, "n": 124, "name": "Clara Zepeda Alvarez", "age": "17 years old", "date": "feb/17/98", "place": "Col. Colinas de Juárez", "cause": "Fire arm wounds", "attacker": "Jorge Ernesto Ortiz, Gang Loco 13", "details": "She was not abducted"}, {"lat": 31.7101, "lng": -106.4649, "n": 125, "name": "Perla Patricia Sáenz Diaz", "age": "25 years old", "date": "feb/19/98", "place": "Motel Fronterizo.", "cause": "Chest wounds with ice pick", "attacker": "Carlos Ortiz Huerta \"El pelón,\" June, 98; released on the 15 of October, 98", "details": ""}, {"lat": 31.6756, "lng": -106.5161, "n": 126, "name": "Elizabeth ?", "age": "?", "date": "feb/21/98", "place": "Ponciano Arriage and Eje vial, by the train tracks", "cause": "Incinerated", "attacker": "Carlos Ortiz Huerta \"El pelón,\" June, 98; released on the 15 of October, 98", "details": ""}, {"lat": 31.665, "lng": -106.4344, "n": 127, "name": "Mujer hondureña", "age": "20 or 25", "date": "mar/18/98", "place": "Canal Irrigation, Waterfill", "cause": "Wounded by sharp blade.", "attacker": "Juan, Husband (hondurian)", "details": ""}, {"lat": 31.673, "lng": -106.5161, "n": 128, "name": "Argelia Irjan Salazar Crispin", "age": "24 years old", "date": "apr/16/98", "place": "Plot of land on Eje J. Gabriel and P. Arriaga.", "cause": "Unknown", "attacker": "ND, but lived with a man who would threaten her", "details": "mar/6/98"}, {"lat": 31.6411, "lng": -106.5381, "n": 129, "name": "Unknown victim", "age": "16 years old", "date": "apr/19/98", "place": "Boulevard Oscar Flores and Barranco Azul, soccer fields", "cause": "Physical blows, Wounded by sharp blade.", "attacker": "", "details": "mar/12/98 (impossible)"}, {"lat": 31.5934, "lng": -106.4307, "n": 130, "name": "Saugrario González", "age": "17 years old", "date": "abr/29/98", "place": "Loma Blanca, Valle de Juárez.", "cause": "Manual Strangling.", "attacker": "", "details": "apr/14/98"}, {"lat": 31.6133, "lng": -106.5222, "n": 131, "name": "Brenda Patricia Méndez Vázquez", "age": "15 years old", "date": "jun/26/98", "place": "Libramiento aeropuerto, 200 m glorieta.", "cause": "Strangling", "attacker": "", "details": "jun/24/98 reported"}, {"lat": 31.6584, "lng": -106.4344, "n": 132, "name": "Araceli Bolyears old", "age": "24 years old", "date": "aug/4/98", "place": "Motel Campo Real Waterfall", "cause": "Strangling", "attacker": "Boyfriend", "details": ""}, {"lat": 31.75, "lng": -106.49, "n": 133, "name": "Araceli Gómez Martinez", "age": "24 years old", "date": "aug/18/98", "place": "Philips Plant, Ramón Rivera Lara. among workers, 4:00 pm.", "cause": "Bled out, Wounded by sharp blade", "attacker": "Miguel Angel Romero López, Husband, confessed.", "details": ""}, {"lat": 31.7406, "lng": -106.4881, "n": 134, "name": "Olga González López", "age": "23 years old", "date": "aug/23/98", "place": "General Hospital attack in Col Panfilo Natera", "cause": "Wounded by Fire Arm, seven gun shots", "attacker": "Grocer \"El Cuco\"", "details": ""}, {"lat": 31.6252, "lng": -106.5637, "n": 135, "name": "Eréndira Ivonne Ponce Hernández", "age": "17 years old", "date": "aug/30/98", "place": "Km29 C. Casas Grandes", "cause": "Unknown", "attacker": "", "details": "15 days"}, {"lat": 31.6517, "lng": -106.543, "n": 136, "name": "Rocío Barraza Gallegos", "age": "23 years old", "date": "sep/19/98", "place": "Parking Lot", "cause": "Wounded by Fire Arm on the nape", "attacker": "Pedro Alejandro Valles Chaires, PJE, Assigned to the Department of Sexual Crimes in Ciudad Juarez", "details": ""}, {"lat": 31.6716, "lng": -106.5662, "n": 137, "name": "Unknown victim", "age": "25 years old", "date": "oct/4/98", "place": "Garbage dump near Col. Panfilo Natera", "cause": "Blow to the head", "attacker": "Her boyfriend and someone else", "details": ""}]
+
+const map = L.map('map', { center: [31.69, -106.42], zoom: 12, zoomControl: true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO', maxZoom: 19 }).addTo(map);
+
+const clusters = L.markerClusterGroup({
+  maxClusterRadius: 40, zoomToBoundsOnClick: false,
+  spiderfyOnMaxZoom: false, showCoverageOnHover: false,
+  iconCreateFunction: function(cluster) {
+    const count = cluster.getChildCount();
+    return L.divIcon({ html: '<div class="hex-cluster">' + count + '</div>', className: '', iconSize: [40, 40] });
+  }
+});
+
+function buildCaseHtml(d) {
+  let html = '<div class="popup-name">' + d.name + '</div>';
+  html += '<div class="popup-case">Case #' + d.n + '</div>';
+  html += '<div class="popup-row"><span class="popup-label">Age:</span><span class="popup-val">' + d.age + '</span></div>';
+  html += '<div class="popup-row"><span class="popup-label">Found:</span><span class="popup-val">' + d.date + '</span></div>';
+  if (d.place) html += '<div class="popup-row"><span class="popup-label">Location:</span><span class="popup-val">' + d.place + '</span></div>';
+  html += '<div class="popup-row"><span class="popup-label">Cause:</span><span class="popup-val">' + d.cause + '</span></div>';
+  if (d.attacker) html += '<div class="popup-attacker">⚠ Attacker: ' + d.attacker + '</div>';
+  if (d.details) html += '<div class="popup-attacker" style="color:#ffddaa">📌 ' + d.details + '</div>';
+  return html;
+}
+
+let selectedMarker = null;
+const markersByN = {};
+
+function setMarkerOrange(marker, on) {
+  const el = marker.getElement && marker.getElement();
+  if (!el) return;
+  const dot = el.querySelector('.num-marker');
+  if (dot) dot.classList.toggle('selected', on);
+}
+function selectMarker(marker) {
+  if (selectedMarker && selectedMarker !== marker) setMarkerOrange(selectedMarker, false);
+  selectedMarker = marker;
+  setMarkerOrange(marker, true);
+}
+function clearSelection() {
+  if (selectedMarker) { setMarkerOrange(selectedMarker, false); selectedMarker = null; }
+}
+
+// Jump to a case by number from the list panel
+function jumpToCase(n) {
+  const marker = markersByN[n];
+  if (!marker) return;
+  clusters.zoomToShowLayer(marker, function() {
+    marker.openPopup();
+    map.setView(marker.getLatLng(), Math.max(map.getZoom(), 16), { animate: true });
+  });
+}
+
+points.forEach(p => {
+  const icon = L.divIcon({
+    html: '<div class="num-marker">' + p.n + '</div>',
+    className: '', iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -14]
+  });
+  const marker = L.marker([p.lat, p.lng], { icon, caseN: p.n, caseData: p });
+  marker.bindPopup(buildCaseHtml(p), { maxWidth: 300 });
+  marker.on('popupopen', () => {
+    selectMarker(marker);
+    const el = marker.getPopup().getElement();
+    if (el) el.classList.add('popup-selected');
+  });
+  marker.on('popupclose', () => { if (selectedMarker === marker) clearSelection(); });
+  clusters.addLayer(marker);
+  markersByN[p.n] = marker;
+});
+map.addLayer(clusters);
+
+// Build case list
+function buildCaseList(filter) {
+  const container = document.getElementById('case-list');
+  const q = (filter || '').toLowerCase().trim();
+  const filtered = points.filter(p => {
+    if (!q) return true;
+    const num = String(p.n);
+    return num === q || p.name.toLowerCase().includes(q) || num.startsWith(q);
+  });
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="case-no-results">No cases found</div>';
+    return;
+  }
+  container.innerHTML = filtered.map(p =>
+    `<div class="case-list-item" onclick="jumpToCase(${p.n})">
+      <div class="case-list-num">${p.n}</div>
+      <div class="case-list-info">
+        <div class="case-list-name">${p.name}</div>
+        <div class="case-list-date">${p.date}</div>
+      </div>
+    </div>`
+  ).join('');
+}
+function filterCases(val) { buildCaseList(val); }
+buildCaseList('');
+
+// Cluster click
+clusters.on('clusterclick', function(a) {
+  const childMarkers = a.layer.getAllChildMarkers();
+  const center = a.layer.getLatLng();
+  function listHtml() {
+    let html = '<div class="popup-name">' + childMarkers.length + ' cases at this location</div>';
+    html += '<div class="cluster-list">';
+    childMarkers.slice().sort((m1, m2) => m1.options.caseN - m2.options.caseN).forEach(m => {
+      const d = m.options.caseData;
+      html += '<div class="cluster-item" data-case="' + m.options.caseN + '">';
+      html += '<span class="cluster-item-num' + (m === selectedMarker ? ' selected' : '') + '">' + d.n + '</span>';
+      html += '<span class="cluster-item-name">' + d.name + '</span></div>';
+    });
+    html += '</div><div class="cluster-hint">Click a name for full case details</div>';
+    return html;
+  }
+  function caseHtmlWithBack(caseN) {
+    const marker = childMarkers.find(m => m.options.caseN === caseN);
+    return buildCaseHtml(marker.options.caseData) +
+      '<div class="cluster-back" data-action="back">&larr; Back to list of ' + childMarkers.length + ' cases</div>';
+  }
+  function wireList(container) {
+    container.classList.remove('popup-selected');
+    L.DomEvent.disableClickPropagation(container);
+    container.querySelectorAll('.cluster-item').forEach(el => {
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        const caseN = parseInt(el.getAttribute('data-case'), 10);
+        const marker = childMarkers.find(m => m.options.caseN === caseN);
+        popup.setContent(caseHtmlWithBack(caseN));
+        const newEl = popup.getElement();
+        wireBack(newEl);
+        if (marker) {
+          selectMarker(marker);
+          newEl.classList.add('popup-selected');
+          map.setView(marker.getLatLng(), Math.max(map.getZoom(), 16), { animate: true });
+          map.once('moveend', () => setMarkerOrange(marker, true));
+        }
+      });
+    });
+  }
+  function wireBack(container) {
+    L.DomEvent.disableClickPropagation(container);
+    const back = container.querySelector('.cluster-back');
+    if (back) back.addEventListener('click', e => {
+      e.stopPropagation();
+      clearSelection();
+      popup.setContent(listHtml());
+      wireList(popup.getElement());
+      map.setView(center, map.getZoom(), { animate: true });
+      popup.setLatLng(center);
+    });
+  }
+  const popup = L.popup({ maxWidth: 320, className: 'cluster-popup', autoPan: true })
+    .setLatLng(center).setContent(listHtml()).openOn(map);
+  popup.on('remove', () => clearSelection());
+  setTimeout(() => wireList(popup.getElement()), 0);
+});
+
+function toggleCaseList() {
+  const panel = document.getElementById('case-panel');
+  const btn = document.getElementById('list-btn');
+  const isOpen = panel.classList.contains('open');
+  panel.classList.toggle('open');
+  btn.classList.toggle('active');
+  btn.textContent = isOpen ? '📋 Browse All Cases' : '✕ Close Case List';
+  setTimeout(() => map.invalidateSize(), 360);
+}
+
+function toggleOldMap() {
+  const panel = document.getElementById('old-map-panel');
+  const btn = document.getElementById('toggle-btn');
+  const isOpen = panel.classList.contains('open');
+  panel.classList.toggle('open');
+  btn.classList.toggle('active');
+  btn.textContent = isOpen ? '🗺 Compare Original Map' : '✕ Close Original Map';
+  setTimeout(() => map.invalidateSize(), 360);
+}
+</script>
+</body>
+</html>
